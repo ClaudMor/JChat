@@ -12,6 +12,7 @@ import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.Scanner;
 
 public class Server implements Runnable {
 	public Thread ServerThread;
@@ -22,6 +23,8 @@ public class Server implements Runnable {
 	private DatagramSocket JoinSocket;
 	private DatagramPacket JoinPacket;
 	private DatagramPacket BroadcastPacket;
+	private Thread BroadcastThread;
+	private Thread ListenForJoinThread;
 	private boolean running = true;
 	private ClientInfo clientinfo;
 	public String LocalIP = "192.168.0.30";
@@ -45,89 +48,118 @@ public class Server implements Runnable {
 		// System.out.println("ServerDatagramSocket started, listening on port " +
 		// ServerPort);
 
-		System.out.println(JoinSocket.getPort());
+		// System.out.println(JoinSocket.getPort());
 		ServerThread.start();
 	}
 
 	private void ListenForJoin() {
-		Thread ListenForJoinThread = new Thread("ListenForJoinThread") {
-			
-		public void run() {
-		while (running) {
-			byte[] JoinData = new byte[1024];
-			JoinPacket = new DatagramPacket(JoinData, JoinData.length);
-			try {
-				System.out.println("Waiting for ClientDatagramPacket");
-				JoinSocket.receive(JoinPacket);
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			try {
-				clientinfo = new ClientInfo(JoinPacket.getAddress(), JoinPacket.getPort(),
-						new String(JoinPacket.getData(), "UTF-8"));
-			} catch (UnsupportedEncodingException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			ClientInfoArrayList.add(clientinfo);
-			System.out.println("Client connected. IP: "+ clientinfo.getClientInetAddress()+"port:" + clientinfo.getClientPort()+"name: "+ clientinfo.getClientName());
+		ListenForJoinThread = new Thread("ListenForJoinThread") {
 
-		}
-		JoinSocket.close();
-		}
-		}; ListenForJoinThread.start();
-	
-	
+			public void run() {
+				while (running) {
+					byte[] JoinData = new byte[1024];
+					JoinPacket = new DatagramPacket(JoinData, JoinData.length);
+					try {
+						System.out.println("Waiting for ClientDatagramPacket");
+						JoinSocket.receive(JoinPacket);
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					try {
+						clientinfo = new ClientInfo(JoinPacket.getAddress(), JoinPacket.getPort(),
+								new String(JoinPacket.getData(), "UTF-8"));
+					} catch (UnsupportedEncodingException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					ClientInfoArrayList.add(clientinfo);
+					System.out.println("Client connected. IP: " + clientinfo.getClientInetAddress() + "port:"
+							+ clientinfo.getClientPort() + "name: " + clientinfo.getClientName());
+
+				}
+				System.out.println("Terminating ListenForJoin (79)");
+				
+			}
+		};
+		ListenForJoinThread.start();
+
 	}
 
 	public void Broadcast() throws IOException {
-		Thread BroadcastThread = new Thread("BroadcastThread") {
-			
-		public void run() {
-		while (running) {
-			byte ReceivedBytes[] = new byte[10240]; // bytes ricevuti
-			BroadcastPacket = new DatagramPacket(ReceivedBytes, ReceivedBytes.length);
+		BroadcastThread = new Thread("BroadcastThread") {
 
-			try {
-				
-				BroadcastSocket.receive(BroadcastPacket);
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-System.out.println("message received");
-			for (int i = 0; i < ClientInfoArrayList.size(); i++) {
-				BroadcastPacket.setPort(ClientInfoArrayList.get(i).getClientPort());
-				BroadcastPacket.setAddress(ClientInfoArrayList.get(i).getClientInetAddress());
-				BroadcastPacket.setData(
-						new String(ClientInfoArrayList.get(i).getClientName()+ ": "+ BroadcastPacket.getData().toString())
-								.getBytes());
-				try {
-					BroadcastSocket.send(BroadcastPacket);
-				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+			public void run() {
+				while (running) {
+					byte ReceivedBytes[] = new byte[10240]; // bytes ricevuti
+					BroadcastPacket = new DatagramPacket(ReceivedBytes, ReceivedBytes.length);
+					System.out.println("waiting for a Client message");
+
+					try {
+
+						BroadcastSocket.receive(BroadcastPacket);
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					System.out.println("message received");
+					for (int i = 0; i < ClientInfoArrayList.size(); i++) {
+						BroadcastPacket.setPort(ClientInfoArrayList.get(i).getClientPort());
+						BroadcastPacket.setAddress(ClientInfoArrayList.get(i).getClientInetAddress());
+						BroadcastPacket.setData(new String(ClientInfoArrayList.get(i).getClientName() + ": "
+								+ BroadcastPacket.getData().toString()).getBytes());
+						try {
+							BroadcastSocket.send(BroadcastPacket);
+						} catch (IOException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+					}
 				}
+				System.out.println("Terminating Broadcast (115)");
+				
 			}
-		}
-		}
-	}; BroadcastThread.start();
+		};
+		BroadcastThread.start();
 	}
 
 	public void ShutDown() {
-		this.running = false;
+		Thread ShutDownThread = new Thread("ShutDownThread") { // sarebbe bello spegnere il server con un botoone da
+																// interfaccia
+
+			public void run() {
+				Scanner scanner = new Scanner(System.in);
+				int i = 1;
+				while (i != 0) {
+					System.out.println(i);
+					i= scanner.nextInt();
+				}
+				System.out.println("Executing ShutDown(126)");
+				/*JoinSocket.close();
+				BroadcastSocket.close();*/
+				BroadcastThread.interrupt();
+				ListenForJoinThread.interrupt();
+			
+				//running = false;
+			}
+		};
+		ShutDownThread.start();
+
 	}
 
 	@Override
 	public void run() {
 		ListenForJoin();
+		System.out.println("ListenForJoin started");
 		try {
 			Broadcast();
+			System.out.println("BroadCast started");
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		ShutDown();
+		System.out.println("ShutDown started");
 
 	}
 
